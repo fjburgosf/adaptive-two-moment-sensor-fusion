@@ -80,7 +80,7 @@ The scripts create these directories as needed.
 - `results/primary/` contains simulation-level CSV and JSON outputs.
 - `tables/` contains analysis tables.
 - `figures/` contains working figures.
-- `submission_figures/` contains numbered PNG and PDF figures.
+- `submission_figures/` contains seven numbered PNG and PDF figures.
 - `submission_tables/` contains numbered CSV and Markdown tables.
 
 The sensitivity script removes repeated nominal conditions from the rank
