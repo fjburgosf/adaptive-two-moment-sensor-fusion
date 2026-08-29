@@ -68,25 +68,39 @@ def save(fig, name, number):
 
 
 def fig1_consistency(df):
-    """NEES frente a severidad, un panel por escenario degradado."""
-    scens = [s for s in SCEN_LABEL if s != "S0_nominal"]
-    fig, axes = plt.subplots(1, len(scens), figsize=(7.2, 2.0), sharey=True)
-    for ax, scen in zip(axes, scens):
-        sub = df[(df.escenario == scen) & df.estimador.isin(MAIN)]
-        piv = sub.groupby(["estimador", "severidad"])["nees"].mean().unstack()
-        for est in MAIN:
-            ax.plot(piv.columns, piv.loc[est], label=LABELS[est],
-                    **STYLE[est])
-        ax.axhspan(4.975, 7.120, color="0.75", alpha=0.35, lw=0, zorder=0)
-        ax.set_yscale("log")
-        ax.set_title(SCEN_LABEL[scen])
-        ax.set_xlabel("severidad")
-    axes[0].set_ylabel("NEES promedio")
-    fig.legend(*axes[0].get_legend_handles_labels(), loc="lower center",
-               bbox_to_anchor=(0.5, -0.30), frameon=False, ncol=3)
-    fig.suptitle("Consistencia frente a severidad. La banda gris es el "
-                 "intervalo teorico al noventa y cinco por ciento", y=1.06)
-    save(fig, "fig1_consistencia_severidad", 1)
+    """NEES frente a severidad, separado para mejorar la lectura."""
+    groups = [
+        (["S1_noise", "S2_bias", "S3_outlier"],
+         "fig1_consistencia_ruido_sesgo_atipicos", 1),
+        (["S4_dropout", "S5_combined"],
+         "fig2_consistencia_perdida_combinado", 2),
+    ]
+    for scens, name, number in groups:
+        fig, axes_grid = plt.subplots(
+            2, len(scens), figsize=(7.2, 4.8), squeeze=False,
+            gridspec_kw={"height_ratios": [4.0, 1.25], "hspace": 0.0},
+            constrained_layout=False)
+        axes = axes_grid[0]
+        for legend_ax in axes_grid[1]:
+            legend_ax.axis("off")
+        for ax, scen in zip(axes, scens):
+            sub = df[(df.escenario == scen) & df.estimador.isin(MAIN)]
+            piv = sub.groupby(["estimador", "severidad"])["nees"].mean().unstack()
+            for est in MAIN:
+                ax.plot(piv.columns, piv.loc[est], label=LABELS[est],
+                        **STYLE[est])
+            ax.axhspan(4.975, 7.120, color="0.75", alpha=0.35, lw=0,
+                       zorder=0)
+            ax.set_yscale("log")
+            ax.set_title(SCEN_LABEL[scen])
+            ax.set_xlabel("severidad")
+        axes[0].set_ylabel("NEES promedio")
+        fig.legend(*axes[0].get_legend_handles_labels(), loc="center",
+                   bbox_to_anchor=(0.5, 0.105), frameon=False, ncol=3,
+                   fontsize=8, labelspacing=0.15, columnspacing=0.8,
+                   handlelength=1.8, handletextpad=0.35)
+        fig.subplots_adjust(bottom=0.04, top=0.94, wspace=0.16)
+        save(fig, name, number)
 
 
 def fig2_rank(df):
@@ -129,7 +143,7 @@ def fig2_rank(df):
                 ax2.text(j, i, "%.2f" % v, ha="center", va="center",
                          fontsize=6, color="0.1")
     fig.colorbar(im, ax=ax2, shrink=0.85, label="Spearman")
-    save(fig, "fig2_ordenamiento_h1", 2)
+    save(fig, "fig3_ordenamiento_h1", 3)
 
 
 def fig3_bias(df):
@@ -162,7 +176,7 @@ def fig3_bias(df):
         ax.set_ylabel(lab)
     axes[2].legend(loc="upper left", frameon=False, fontsize=6)
     fig.suptitle("Escenario de sesgo con deriva en el magnetometro", y=1.05)
-    save(fig, "fig3_sesgo_deriva", 3)
+    save(fig, "fig4_sesgo_deriva", 4)
 
 
 def fig4_ablation(df):
@@ -202,7 +216,7 @@ def fig4_ablation(df):
                         fontsize=6)
     ax2.set_ylabel("conmutaciones por corrida")
     ax2.set_title("Conmutacion espuria sin degradacion")
-    save(fig, "fig4_ablacion", 4)
+    save(fig, "fig5_ablacion", 5)
 
 
 def fig5_cost(df):
@@ -235,7 +249,7 @@ def fig5_cost(df):
     ax2.set_xlabel("numero de comparaciones, treinta por metrica")
     ax2.set_title("Comparacion pareada, severidad uno")
     ax2.legend(frameon=False, fontsize=6, loc="lower right")
-    save(fig, "fig5_costo_y_comparacion", 5)
+    save(fig, "fig6_costo_y_comparacion", 6)
 
 
 def fig6_compensation(df):
@@ -274,7 +288,7 @@ def fig6_compensation(df):
     ax2.set_ylabel("RMSE ante sesgo, m")
     ax2.set_title("Dispersion entre cuarenta repeticiones")
     ax2.tick_params(axis="x", rotation=25)
-    save(fig, "fig6_compensacion_sesgo", 6)
+    save(fig, "fig7_compensacion_sesgo", 7)
 
 
 def main():
