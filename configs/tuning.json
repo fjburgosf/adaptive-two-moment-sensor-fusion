@@ -1,0 +1,8 @@
+{
+  "q_scale_nominal": 0.9976,
+  "nees_target": 6,
+  "nees_achieved": 5.9994,
+  "n_rep_tuning": 60,
+  "warm_s": 20.0,
+  "note": "Sintonizado el 2026-08-27 sobre el escenario sin degradacion. No se re-sintoniza en ningun escenario degradado."
+}

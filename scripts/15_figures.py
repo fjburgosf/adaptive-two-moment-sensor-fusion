@@ -1,0 +1,295 @@
+"""Figuras del manuscrito. Todas generadas por codigo, ninguna a mano.
+
+Salida en figures/ a 600 puntos por pulgada, formato PNG y PDF vectorial.
+Paleta y marcadores elegidos para que las figuras sigan siendo legibles al
+imprimirse en escala de grises.
+
+Fuente de datos, results/primary/confirmatory_runs.csv y los archivos
+derivados en tables/. Ninguna figura vuelve a simular.
+"""
+import os
+import sys
+
+import matplotlib
+import numpy as np
+import pandas as pd
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+ROOT = os.path.join(os.path.dirname(__file__), "..")
+RES = os.path.join(ROOT, "results", "primary")
+TAB = os.path.join(ROOT, "tables")
+FIG = os.path.join(ROOT, "figures")
+SUBMIT = os.path.join(ROOT, "submission_figures")
+DPI = 600
+
+MAIN = ["EKF_nom", "EKF_mis", "CovMatch", "SageHusa", "Huber", "Propuesto"]
+LABELS = {"EKF_nom": "EKF nominal", "EKF_mis": "EKF mal sintonizado",
+          "CovMatch": "Corresp. covarianza", "SageHusa": "Sage Husa",
+          "Huber": "Huber robusto", "Propuesto": "Propuesto"}
+SCEN_LABEL = {"S0_nominal": "S0 sin degradacion", "S1_noise": "S1 ruido",
+              "S2_bias": "S2 sesgo", "S3_outlier": "S3 atipicos",
+              "S4_dropout": "S4 perdida", "S5_combined": "S5 combinado"}
+
+STYLE = {
+    "EKF_nom": dict(color="0.15", marker="o", ls="-"),
+    "EKF_mis": dict(color="0.45", marker="v", ls=":"),
+    "CovMatch": dict(color="#3b6ea5", marker="s", ls="--"),
+    "SageHusa": dict(color="#8a5fa8", marker="^", ls="-."),
+    "Huber": dict(color="#c08a2e", marker="D", ls="--"),
+    "Propuesto": dict(color="#b03030", marker="*", ls="-"),
+}
+
+
+def setup():
+    os.makedirs(FIG, exist_ok=True)
+    os.makedirs(SUBMIT, exist_ok=True)
+    plt.rcParams.update({
+        "font.size": 8, "axes.labelsize": 8, "axes.titlesize": 8.5,
+        "legend.fontsize": 7, "xtick.labelsize": 7, "ytick.labelsize": 7,
+        "axes.grid": True, "grid.alpha": 0.25, "grid.linewidth": 0.4,
+        "lines.linewidth": 1.1, "lines.markersize": 3.4,
+        "axes.spines.top": False, "axes.spines.right": False,
+        "figure.constrained_layout.use": True,
+        "savefig.bbox": "tight", "pdf.fonttype": 42,
+    })
+
+
+def save(fig, name, number):
+    for ext in ("png", "pdf"):
+        fig.savefig(os.path.join(FIG, "%s.%s" % (name, ext)), dpi=DPI)
+        fig.savefig(os.path.join(SUBMIT, "Figure_%02d.%s" % (number, ext)),
+                    dpi=DPI)
+    plt.close(fig)
+    print("  escrita figures/%s.png y .pdf" % name)
+
+
+def fig1_consistency(df):
+    """NEES frente a severidad, un panel por escenario degradado."""
+    scens = [s for s in SCEN_LABEL if s != "S0_nominal"]
+    fig, axes = plt.subplots(1, len(scens), figsize=(7.2, 2.0), sharey=True)
+    for ax, scen in zip(axes, scens):
+        sub = df[(df.escenario == scen) & df.estimador.isin(MAIN)]
+        piv = sub.groupby(["estimador", "severidad"])["nees"].mean().unstack()
+        for est in MAIN:
+            ax.plot(piv.columns, piv.loc[est], label=LABELS[est],
+                    **STYLE[est])
+        ax.axhspan(4.975, 7.120, color="0.75", alpha=0.35, lw=0, zorder=0)
+        ax.set_yscale("log")
+        ax.set_title(SCEN_LABEL[scen])
+        ax.set_xlabel("severidad")
+    axes[0].set_ylabel("NEES promedio")
+    fig.legend(*axes[0].get_legend_handles_labels(), loc="lower center",
+               bbox_to_anchor=(0.5, -0.30), frameon=False, ncol=3)
+    fig.suptitle("Consistencia frente a severidad. La banda gris es el "
+                 "intervalo teorico al noventa y cinco por ciento", y=1.06)
+    save(fig, "fig1_consistencia_severidad", 1)
+
+
+def fig2_rank(df):
+    """H1. Correlacion de ordenamientos con tres objetivos de lazo cerrado."""
+    d = pd.read_csv(os.path.join(TAB, "h1_rank_correlations.csv"))
+    names = {"track_rmse": "error de\nseguimiento medio",
+             "track_max": "excursion\nmaxima",
+             "recovery": "tiempo de\nrecuperacion"}
+    order = list(names)
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(7.2, 2.6),
+                                  gridspec_kw={"width_ratios": [1.0, 1.4]})
+    data = [d[d.objetivo == k]["spearman"].to_numpy() for k in order]
+    bp = ax.boxplot(data, tick_labels=[names[k] for k in order],
+                    widths=0.55, patch_artist=True, showfliers=True)
+    for patch in bp["boxes"]:
+        patch.set_facecolor("0.85")
+        patch.set_linewidth(0.8)
+    for med in bp["medians"]:
+        med.set_color("#b03030")
+        med.set_linewidth(1.4)
+    ax.axhline(1.0, color="0.4", lw=0.6, ls=":")
+    ax.set_ylabel("Spearman entre orden por RMSE\ny orden en lazo cerrado")
+    ax.set_title("Treinta celdas de escenario por severidad")
+
+    piv = (d[d.objetivo == "recovery"]
+           .pivot(index="escenario", columns="severidad", values="spearman"))
+    im = ax2.imshow(piv.to_numpy(), cmap="RdYlBu", vmin=-1, vmax=1,
+                    aspect="auto")
+    ax2.set_xticks(range(piv.shape[1]))
+    ax2.set_xticklabels(["%.2f" % c for c in piv.columns])
+    ax2.set_yticks(range(piv.shape[0]))
+    ax2.set_yticklabels([SCEN_LABEL.get(i, i) for i in piv.index])
+    ax2.set_xlabel("severidad")
+    ax2.set_title("Tiempo de recuperacion, por celda")
+    ax2.grid(False)
+    for i in range(piv.shape[0]):
+        for j in range(piv.shape[1]):
+            v = piv.to_numpy()[i, j]
+            if np.isfinite(v):
+                ax2.text(j, i, "%.2f" % v, ha="center", va="center",
+                         fontsize=6, color="0.1")
+    fig.colorbar(im, ax=ax2, shrink=0.85, label="Spearman")
+    save(fig, "fig2_ordenamiento_h1", 2)
+
+
+def fig3_bias(df):
+    """Punto ciego ante sesgo, mediana y rango intercuartilico."""
+    arms = ["EKF_nom", "CovMatch", "SageHusa", "Huber", "Propuesto",
+            "Abl_sin_media"]
+    sub = df[(df.escenario == "S2_bias") & df.estimador.isin(arms)]
+    fig, axes = plt.subplots(1, 3, figsize=(7.2, 2.3))
+    metrics = [("nees", "NEES promedio", True),
+               ("pos_rmse", "RMSE de posicion, m", False),
+               ("track_max", "excursion maxima, m", False)]
+    for ax, (m, lab, logy) in zip(axes, metrics):
+        grouped = sub.groupby(["estimador", "severidad"])[m]
+        med = grouped.median().unstack()
+        q1 = grouped.quantile(0.25).unstack()
+        q3 = grouped.quantile(0.75).unstack()
+        for est in [e for e in MAIN if e in med.index]:
+            ax.plot(med.columns, med.loc[est], label=LABELS[est], **STYLE[est])
+            ax.fill_between(med.columns, q1.loc[est], q3.loc[est],
+                            color=STYLE[est]["color"], alpha=0.08, lw=0)
+        est = "Abl_sin_media"
+        ax.plot(med.columns, med.loc[est], color="#b03030", ls=":",
+                marker="x", label="Propuesto sin prueba\ndel primer momento")
+        ax.fill_between(med.columns, q1.loc[est], q3.loc[est],
+                        color="#b03030", alpha=0.08, lw=0)
+        if logy:
+            ax.set_yscale("log")
+            ax.axhspan(4.975, 7.120, color="0.75", alpha=0.35, lw=0, zorder=0)
+        ax.set_xlabel("severidad del sesgo")
+        ax.set_ylabel(lab)
+    axes[2].legend(loc="upper left", frameon=False, fontsize=6)
+    fig.suptitle("Escenario de sesgo con deriva en el magnetometro", y=1.05)
+    save(fig, "fig3_sesgo_deriva", 3)
+
+
+def fig4_ablation(df):
+    """Escalera de ablacion. Precio en nominal frente a beneficio en sesgo."""
+    arms = ["EKF_nom", "Abl_solo_inflacion", "Abl_sin_media", "Abl_sin_zona",
+            "Abl_sin_permanencia", "Propuesto"]
+    names = {"EKF_nom": "EKF nominal", "Abl_solo_inflacion": "solo inflacion",
+             "Abl_sin_media": "sin prueba del\nprimer momento",
+             "Abl_sin_zona": "sin zona muerta",
+             "Abl_sin_permanencia": "sin tiempo de\npermanencia",
+             "Propuesto": "esquema completo"}
+    nom = (df[(df.escenario == "S0_nominal") & (df.severidad == 0.0)]
+           .groupby("estimador")["pos_rmse"].median())
+    bias = (df[(df.escenario == "S2_bias") & (df.severidad == 1.0)]
+            .groupby("estimador")["pos_rmse"].median())
+    sw = (df[(df.escenario == "S0_nominal") & (df.severidad == 0.0)]
+          .groupby("estimador")["sw_mag"].mean())
+    arms = [a for a in arms if a in nom.index and a in bias.index]
+
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(7.2, 2.6))
+    x = np.arange(len(arms))
+    ax.bar(x - 0.2, [nom[a] for a in arms], 0.38, color="0.6",
+           label="sin degradacion")
+    ax.bar(x + 0.2, [bias[a] for a in arms], 0.38, color="#b03030",
+           label="sesgo severidad uno")
+    ax.set_xticks(x)
+    ax.set_xticklabels([names[a] for a in arms], rotation=35, ha="right",
+                       fontsize=6)
+    ax.set_ylabel("RMSE de posicion, m")
+    ax.set_yscale("log")
+    ax.legend(frameon=False)
+    ax.set_title("Beneficio y precio de cada elemento")
+
+    ax2.bar(x, [sw.get(a, 0.0) for a in arms], 0.6, color="0.35")
+    ax2.set_xticks(x)
+    ax2.set_xticklabels([names[a] for a in arms], rotation=35, ha="right",
+                        fontsize=6)
+    ax2.set_ylabel("conmutaciones por corrida")
+    ax2.set_title("Conmutacion espuria sin degradacion")
+    save(fig, "fig4_ablacion", 4)
+
+
+def fig5_cost(df):
+    """Costo relativo y resultado de la comparacion pareada."""
+    ct = pd.read_csv(os.path.join(TAB, "computational_cost.csv"),
+                     index_col=0)
+    hh = pd.read_csv(os.path.join(TAB, "head_to_head_sev1.csv"))
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(7.2, 2.4))
+    ct = ct.loc[[e for e in MAIN if e in ct.index]]
+    ax.barh([LABELS[i] for i in ct.index], ct["relativo"], color="0.5")
+    ax.axvline(1.0, color="0.2", lw=0.8, ls=":")
+    ax.set_xlabel("costo relativo al EKF nominal")
+    ax.set_title("Costo computacional")
+
+    mets = ["pos_rmse", "track_rmse", "track_max"]
+    mlab = ["RMSE de\nestimacion", "seguimiento\nmedio", "excursion\nmaxima"]
+    win, lose, tie = [], [], []
+    for m in mets:
+        s = hh[hh.metrica == m]
+        win.append(int(((s.mejor == "Propuesto") & s.significativo).sum()))
+        lose.append(int(((s.mejor != "Propuesto") & s.significativo).sum()))
+        tie.append(len(s) - win[-1] - lose[-1])
+    y = np.arange(len(mets))
+    ax2.barh(y, win, color="#3b6ea5", label="gana el propuesto")
+    ax2.barh(y, tie, left=win, color="0.75", label="sin diferencia")
+    ax2.barh(y, lose, left=np.array(win) + np.array(tie), color="#b03030",
+             label="pierde")
+    ax2.set_yticks(y)
+    ax2.set_yticklabels(mlab)
+    ax2.set_xlabel("numero de comparaciones, treinta por metrica")
+    ax2.set_title("Comparacion pareada, severidad uno")
+    ax2.legend(frameon=False, fontsize=6, loc="lower right")
+    save(fig, "fig5_costo_y_comparacion", 5)
+
+
+def fig6_compensation(df):
+    """Frontera de compromiso entre exclusion y compensacion de sesgo."""
+    arms = ["EKF_nom", "Propuesto", "Compensado", "Comp_siempre"]
+    labels = {"EKF_nom": "EKF nominal", "Propuesto": "excluir",
+              "Compensado": "reparar con disparo",
+              "Comp_siempre": "reparar siempre"}
+    colors = {"EKF_nom": "0.35", "Propuesto": "#b03030",
+              "Compensado": "#3b6ea5", "Comp_siempre": "#4f8a55"}
+    nom = df[(df.escenario == "S0_nominal") & (df.severidad == 0.0)]
+    bias = df[(df.escenario == "S2_bias") & (df.severidad == 1.0)]
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(7.2, 2.6))
+    for arm in arms:
+        x = nom[nom.estimador == arm].pos_rmse
+        y = bias[bias.estimador == arm].pos_rmse
+        ax.scatter(x.median(), y.median(), s=34, color=colors[arm],
+                   label=labels[arm], zorder=3)
+        ax.errorbar(x.median(), y.median(),
+                    xerr=[[x.median() - x.quantile(0.25)],
+                          [x.quantile(0.75) - x.median()]],
+                    yerr=[[y.median() - y.quantile(0.25)],
+                          [y.quantile(0.75) - y.median()]],
+                    fmt="none", color=colors[arm], capsize=2, lw=0.8)
+    ax.set_xlabel("RMSE nominal, m")
+    ax.set_ylabel("RMSE ante sesgo, m")
+    ax.set_title("Mediana y rango intercuartilico")
+    ax.legend(frameon=False, fontsize=6)
+
+    data = [bias[bias.estimador == a].pos_rmse.to_numpy() for a in arms]
+    bp = ax2.boxplot(data, tick_labels=[labels[a] for a in arms],
+                     patch_artist=True, showfliers=True)
+    for patch, arm in zip(bp["boxes"], arms):
+        patch.set_facecolor(colors[arm])
+        patch.set_alpha(0.35)
+    ax2.set_ylabel("RMSE ante sesgo, m")
+    ax2.set_title("Dispersion entre cuarenta repeticiones")
+    ax2.tick_params(axis="x", rotation=25)
+    save(fig, "fig6_compensacion_sesgo", 6)
+
+
+def main():
+    setup()
+    df = pd.read_csv(os.path.join(RES, "confirmatory_runs.csv"))
+    df2 = pd.read_csv(os.path.join(RES, "confirmatory_v2_runs.csv"))
+    print("generando figuras a %d puntos por pulgada" % DPI)
+    fig1_consistency(df)
+    fig2_rank(df)
+    fig3_bias(df2)
+    fig4_ablation(df2)
+    fig5_cost(df)
+    fig6_compensation(df2)
+    print("listo")
+
+
+if __name__ == "__main__":
+    main()
